@@ -13,8 +13,30 @@ later depends on this schema. Changing it after you've built 5 nodes means
 touching all 5 nodes again.
 """
 
-from typing import TypedDict, List, Dict, Optional, Literal
+from typing import TypedDict, List, Dict, Optional, Literal, Annotated
 from langchain_core.documents import Document
+
+
+def merge_retrieved_docs(
+    existing: Dict[str, List[Document]],
+    update: Dict[str, List[Document]],
+) -> Dict[str, List[Document]]:
+    """
+    Custom reducer for retrieved_docs.
+
+    LangGraph's DEFAULT merge behavior for a dict field is "last write wins" --
+    if two retriever nodes finish in the same step and both return an update
+    to retrieved_docs, whichever one LangGraph processes last overwrites the
+    other's result entirely. Since our retriever nodes run in PARALLEL (one
+    per selected domain), this would silently drop results.
+
+    This reducer instead merges keys, so retrieve_finance's output and
+    retrieve_uploaded_doc's output both survive even if they complete in the
+    same graph step.
+    """
+    merged = dict(existing)
+    merged.update(update)
+    return merged
 
 
 # ---------------------------------------------------------------------------
@@ -56,8 +78,10 @@ class GraphState(TypedDict):
 
     # --- Retrieval output ---
     # Keyed by domain, so each retriever node only writes to its own key and
-    # never clobbers another domain's results.
-    retrieved_docs: Dict[Domain, List[Document]]
+    # never clobbers another domain's results. Annotated with a custom reducer
+    # (merge_retrieved_docs) because these writes happen in PARALLEL -- see
+    # that function's docstring for why this matters.
+    retrieved_docs: Annotated[Dict[Domain, List[Document]], merge_retrieved_docs]
 
     # --- Generation output ---
     # One candidate answer per (domain, model) pair that ran.
