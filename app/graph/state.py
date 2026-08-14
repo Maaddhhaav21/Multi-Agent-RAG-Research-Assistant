@@ -13,6 +13,7 @@ later depends on this schema. Changing it after you've built 5 nodes means
 touching all 5 nodes again.
 """
 
+import operator
 from typing import TypedDict, List, Dict, Optional, Literal, Annotated
 from langchain_core.documents import Document
 
@@ -84,8 +85,13 @@ class GraphState(TypedDict):
     retrieved_docs: Annotated[Dict[Domain, List[Document]], merge_retrieved_docs]
 
     # --- Generation output ---
-    # One candidate answer per (domain, model) pair that ran.
-    candidate_answers: List[CandidateAnswer]
+    # One candidate answer per (domain, model) pair that ran. Annotated with
+    # operator.add (plain list concatenation) because -- same issue as
+    # retrieved_docs above -- multiple generator nodes run in PARALLEL, each
+    # returning ITS OWN single-item list. Without this reducer, LangGraph's
+    # default "last write wins" would keep only one model's answer and
+    # silently discard the rest, defeating the whole point of this project.
+    candidate_answers: Annotated[List[CandidateAnswer], operator.add]
 
     # --- Fusion output ---
     final_answer: Optional[str]

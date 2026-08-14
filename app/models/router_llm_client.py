@@ -15,9 +15,19 @@ classification task and doesn't need a frontier model.
 """
 
 import os
+from functools import lru_cache
 from openai import OpenAI
 
-_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+@lru_cache(maxsize=1)
+def _get_client() -> OpenAI:
+    """
+    Lazy client creation -- see openai_client.py (Phase 3) for why this
+    matters: instantiating OpenAI() at import time crashes any code path
+    that imports this module before OPENAI_API_KEY is set, even if that
+    code path never actually calls the API.
+    """
+    return OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 
 def call_router_llm(system_prompt: str, user_prompt: str) -> str:
@@ -26,7 +36,7 @@ def call_router_llm(system_prompt: str, user_prompt: str) -> str:
     Using gpt-4o-mini here keeps routing latency and cost low --
     you don't want your router to be the slowest part of the pipeline.
     """
-    response = _client.chat.completions.create(
+    response = _get_client().chat.completions.create(
         model="gpt-4o-mini",
         max_tokens=100,
         messages=[
